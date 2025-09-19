@@ -1,71 +1,47 @@
-﻿## Scaffold Project
-You are an expert Spring Boot engineer. Use the rules in AGENTS.md.
-Task: In the existing Maven Spring Boot app, create a REST microservice "Dictionary Service".
+﻿# Extra Rules for Word Game Challenge
+- Word APIs must support:
+  - exists() check
+  - prefix search
+  - anagrams (letters → valid words)
+  - score (Scrabble letter values)
+- Inputs:
+  - Normalize to lowercase internally.
+  - Reject invalid chars with 400.
+  - Limit anagram letters to max 8.
+  - Limit prefix/anagram results to max 50.
+- Performance:
+  - Use Trie/DAWG for dictionary lookups.
+  - Use prefix pruning in anagram solver.
+- Testing:
+  - Add unit tests for anagrams and scoring.
+  - Edge cases: empty input, invalid chars, too many letters.
 
-Deliverables:
-1) API:
-   - GET /api/words/exists?word=abc -> {word, exists}
-   - GET /api/words/prefix?q=ab&limit=20 -> ["ab", ...]
-   - (Optional if dynamic) POST /api/words {word:"..."} -> 201 or 409
-2) Layers:
-   - controller: WordController
-   - service: DictionaryService
-   - strategy interface: Dictionary { load(InputStream), exists(word), suggest(prefix, limit) }
-   - impls: TrieDictionary, DawgDictionary
-   - DictionaryFactory selects impl via property app.dictionary=trie|dawg.
-3) Bootstrap:
-   - On startup, if app.dictionary.dataFile is set (UTF-8 word-per-line), load it.
-   - Words normalized (trim, lowercase), deduped.
-4) Observability:
-   - Add springdoc-openapi UI; expose actuator/health.
-5) Validation:
-   - limit max 100; q/word length 1..64; reject invalid with 400.
-6) Tests:
-   - Controller tests for exists/prefix.
-   - Unit tests for Dictionary impls with small sample corpus.
-7) README edits:
-   - Run commands with Maven Wrapper, and property examples.
 
-## Implement TrieDictionary
-Implement TrieDictionary (no recursion; iterative).
-- Node fields optimized for memory, e.g., children Map<Character,Node> or fixed array for 'a'..'z'.
-- Methods:
-  - load(InputStream): stream lines, normalize, insert
-  - exists(word): O(m)
-  - suggest(prefix, limit): traverse to node, then bounded DFS/BFS collecting at most 'limit'
-- Edge cases: empty lines; non-alpha characters (keep but exact-match compare).
-- Include unit tests covering typical and edge cases.
+Implement GameUtils.anagrams(letters: String, dict: Dictionary, limit: int):
+- Normalize input (uppercase A–Z only).
+- Generate candidate permutations/combinations.
+- Filter with dict.exists().
+- Return unique words, lexicographically sorted.
+- Limit max results by 'limit' (default 50).
+Optimize:
+- Use backtracking with pruning.
+- Use TrieDictionary prefix check to prune search space.
+Add unit tests:
+- letters="act" → ["act","cat"]
+- letters="dog" → ["dog","god"]
 
-## Implement DAWG/DAFSA (incremental, minimal)
-Implement DawgDictionary using incremental DAFSA construction for a STATIC sorted list.
-Algorithm outline:
-- Sort unique words lexicographically (assume input file already sorted or sort in memory).
-- Maintain register map<StateSignature, State> of minimized states.
-- For each word:
-  - Compute longest common prefix (LCP) with previous word.
-  - Minimize suffix of previous word beyond LCP.
-  - Add new suffix for current word.
-- After all words, minimize the remaining suffix.
-- suggest(): traverse prefix; bounded DFS.
-- exists(): deterministic walk.
-Provide unit tests comparing Trie vs Dawg for same dataset.
-
-## Tests & Quick Perf
-Add tests:
-- exists(): true for present, false for absent; case normalization checks.
-- suggest(): returns <= limit; empty result for missing prefix; stable lexicographic order.
-- Compare Trie and Dawg outputs for same corpus.
-Quick perf harness:
-- Load 50–100k word list.
-- Time suggest("pre",20) runs.
-- Print rough heap use after load.
-
-## README generator
-Update README.md with:
-- Service description.
-- How to run:
-  ./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.dictionary=trie --app.dictionary.dataFile=./data/wordlists/words.txt"
-  ./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.dictionary=dawg --app.dictionary.dataFile=./data/wordlists/words.txt"
-- Swagger URL and curl examples.
-- Trade-offs: Trie vs DAWG.
-- Known limits & future work.
+Implement GameUtils.score(word: String): int
+- Scrabble letter values:
+  A,E,I,O,U,L,N,S,T,R=1
+  D,G=2
+  B,C,M,P=3
+  F,H,V,W,Y=4
+  K=5
+  J,X=8
+  Q,Z=10
+- Return sum of values; ignore case.
+- Return 0 for invalid/non-alpha input.
+Add unit tests:
+- score("cat")=5
+- score("quiz")=22
+- score("zzz")=30
