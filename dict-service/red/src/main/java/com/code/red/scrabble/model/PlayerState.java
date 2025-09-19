@@ -7,10 +7,13 @@ import java.util.UUID;
 
 public class PlayerState {
 
+    public static final long STARTING_TIME_MILLIS = 600_000L;
+
     private final UUID id;
     private final String name;
     private final List<Tile> rack = new ArrayList<>(7);
     private int score;
+    private long remainingTimeMillis = STARTING_TIME_MILLIS;
 
     public PlayerState(UUID id, String name) {
         this.id = id;
@@ -27,6 +30,26 @@ public class PlayerState {
 
     public int getScore() {
         return score;
+    }
+
+    public long getRemainingTimeMillis() {
+        return remainingTimeMillis;
+    }
+
+    public void resetClock() {
+        remainingTimeMillis = STARTING_TIME_MILLIS;
+    }
+
+    public boolean consumeTime(long elapsedMillis) {
+        if (elapsedMillis <= 0) {
+            return false;
+        }
+        if (elapsedMillis >= remainingTimeMillis) {
+            remainingTimeMillis = 0;
+            return true;
+        }
+        remainingTimeMillis -= elapsedMillis;
+        return false;
     }
 
     public void addScore(int delta) {
@@ -82,3 +105,4 @@ public class PlayerState {
         return -1;
     }
 }
+

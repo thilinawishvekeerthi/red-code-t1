@@ -1,10 +1,11 @@
 package com.code.red.config;
 
+import java.time.Clock;
 import java.util.SplittableRandom;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 import com.code.red.dictionary.DictionaryLoader;
 import com.code.red.dictionary.WordDictionary;
@@ -16,6 +17,11 @@ public class DictionaryConfiguration {
     @Bean
     public WordDictionary wordDictionary(DictionaryLoader loader) {
         return loader.load();
+    }
+
+    @Bean
+    public Clock scrabbleClock() {
+        return Clock.systemUTC();
     }
 
     @Bean

@@ -1,5 +1,8 @@
 package com.code.red.scrabble.service;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,15 +35,17 @@ public class ScrabbleService {
 
     private final MoveValidator moveValidator;
     private final SplittableRandom random;
+    private final Clock clock;
     private final GameNotifier gameNotifier;
 
     private final Lobby lobby = new Lobby();
     private final ConcurrentMap<UUID, GameSession> games = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, UUID> playerToGame = new ConcurrentHashMap<>();
 
-    public ScrabbleService(MoveValidator moveValidator, SplittableRandom random, GameNotifier gameNotifier) {
+    public ScrabbleService(MoveValidator moveValidator, SplittableRandom random, Clock clock, GameNotifier gameNotifier) {
         this.moveValidator = moveValidator;
         this.random = random;
+        this.clock = clock;
         this.gameNotifier = gameNotifier;
     }
 
@@ -64,7 +69,13 @@ public class ScrabbleService {
         GameSession session = requireSession(gameId);
         session.getLock().lock();
         try {
-            return snapshot(session.getGame());
+            GameState game = session.getGame();
+            boolean timedOut = updateClock(game);
+            GameSnapshot snapshot = snapshot(game);
+            if (timedOut) {
+                gameNotifier.notifyGame(snapshot);
+            }
+            return snapshot;
         } finally {
             session.getLock().unlock();
         }
@@ -75,6 +86,11 @@ public class ScrabbleService {
         session.getLock().lock();
         try {
             GameState game = session.getGame();
+            if (updateClock(game)) {
+                GameSnapshot snapshot = snapshot(game);
+                gameNotifier.notifyGame(snapshot);
+                throw new IllegalStateException("Player timed out");
+            }
             ensureActive(game);
             if (!game.getCurrentTurn().equals(playerId)) {
                 throw new IllegalArgumentException("It is not the player's turn");
@@ -94,6 +110,7 @@ public class ScrabbleService {
             handlePostMove(game, player);
             if (game.getStatus() == GameStatus.ACTIVE) {
                 game.advanceTurn();
+                game.markTurnStart(clock.instant());
             }
             GameSnapshot snapshot = snapshot(game);
             gameNotifier.notifyGame(snapshot);
@@ -110,6 +127,11 @@ public class ScrabbleService {
         session.getLock().lock();
         try {
             GameState game = session.getGame();
+            if (updateClock(game)) {
+                GameSnapshot snapshot = snapshot(game);
+                gameNotifier.notifyGame(snapshot);
+                throw new IllegalStateException("Player timed out");
+            }
             ensureActive(game);
             if (!game.getCurrentTurn().equals(playerId)) {
                 throw new IllegalArgumentException("It is not the player's turn");
@@ -132,6 +154,7 @@ public class ScrabbleService {
             game.resetPasses();
             if (game.getStatus() == GameStatus.ACTIVE) {
                 game.advanceTurn();
+                game.markTurnStart(clock.instant());
             }
             GameSnapshot snapshot = snapshot(game);
             gameNotifier.notifyGame(snapshot);
@@ -146,6 +169,11 @@ public class ScrabbleService {
         session.getLock().lock();
         try {
             GameState game = session.getGame();
+            if (updateClock(game)) {
+                GameSnapshot snapshot = snapshot(game);
+                gameNotifier.notifyGame(snapshot);
+                throw new IllegalStateException("Player timed out");
+            }
             ensureActive(game);
             if (!game.getCurrentTurn().equals(playerId)) {
                 throw new IllegalArgumentException("It is not the player's turn");
@@ -156,6 +184,7 @@ public class ScrabbleService {
             }
             if (game.getStatus() == GameStatus.ACTIVE) {
                 game.advanceTurn();
+                game.markTurnStart(clock.instant());
             }
             GameSnapshot snapshot = snapshot(game);
             gameNotifier.notifyGame(snapshot);
@@ -174,6 +203,7 @@ public class ScrabbleService {
     }
 
     private void registerGame(GameState game) {
+        game.markTurnStart(clock.instant());
         GameSession session = new GameSession(game);
         games.put(game.getId(), session);
         for (UUID playerId : game.getTurnOrder()) {
@@ -195,6 +225,29 @@ public class ScrabbleService {
         }
     }
 
+    private boolean updateClock(GameState game) {
+        if (game.getStatus() != GameStatus.ACTIVE) {
+            return false;
+        }
+        Instant now = clock.instant();
+        Instant last = game.getLastTurnTimestamp();
+        if (last == null) {
+            game.markTurnStart(now);
+            return false;
+        }
+        long elapsed = Duration.between(last, now).toMillis();
+        if (elapsed <= 0) {
+            return false;
+        }
+        PlayerState current = game.requirePlayer(game.getCurrentTurn());
+        boolean expired = current.consumeTime(elapsed);
+        game.markTurnStart(now);
+        if (expired) {
+            game.setStatus(GameStatus.COMPLETED);
+        }
+        return expired;
+    }
+
     private GameSnapshot snapshot(GameState game) {
         List<String> boardRows = game.getBoard().asStringRows();
         List<PlayerSnapshot> players = new ArrayList<>();
@@ -203,7 +256,7 @@ public class ScrabbleService {
             List<String> rack = state.rackView().stream()
                     .map(tile -> tile.blank() && tile.letter() == '?' ? "?" : String.valueOf(tile.letter()))
                     .toList();
-            players.add(new PlayerSnapshot(state.getId(), state.getName(), state.getScore(), rack));
+            players.add(new PlayerSnapshot(state.getId(), state.getName(), state.getScore(), rack, state.getRemainingTimeMillis()));
         }
         return new GameSnapshot(game.getId(), boardRows, players, game.getCurrentTurn(), game.getStatus(),
                 game.getTileBag().remaining());
@@ -212,6 +265,8 @@ public class ScrabbleService {
     private GameState createGame(String playerAName, UUID playerAId, String playerBName, UUID playerBId) {
         PlayerState playerA = new PlayerState(playerAId, playerAName);
         PlayerState playerB = new PlayerState(playerBId, playerBName);
+        playerA.resetClock();
+        playerB.resetClock();
         TileBag tileBag = new TileBag(random.split());
         playerA.refillRack(tileBag);
         playerB.refillRack(tileBag);
@@ -256,5 +311,6 @@ public class ScrabbleService {
         }
     }
 }
+
 
 

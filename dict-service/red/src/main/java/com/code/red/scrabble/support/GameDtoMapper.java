@@ -16,7 +16,7 @@ public final class GameDtoMapper {
     public static GameStateDto toDto(GameSnapshot snapshot) {
         List<PlayerDto> players = new ArrayList<>(snapshot.players().size());
         for (PlayerSnapshot player : snapshot.players()) {
-            players.add(new PlayerDto(player.playerId(), player.name(), player.score(), player.rack()));
+            players.add(new PlayerDto(player.playerId(), player.name(), player.score(), player.rack(), player.remainingTimeMillis()));
         }
         return new GameStateDto(snapshot.gameId(), snapshot.board(), players, snapshot.currentPlayerId(),
                 snapshot.status(), snapshot.tileBagRemaining());

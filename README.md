@@ -18,6 +18,7 @@ Spring Boot service for two-player Scrabble matches with dictionary-backed valid
 - Input validation via Jakarta Validation and global error handler
 - Deterministic tile bag seeded via `scrabble.random-seed`
 - WebSockets: STOMP endpoint at `/ws` (SockJS optional). Subscribe to `/topic/game/{gameId}` for live `GameStateDto` payloads after joins/moves/exchanges/passes; REST remains the command channel.
+- 10-minute per-player game clock with automatic timeout when it reaches zero
 
 ## Architecture
 - Controller ? Service ? Dictionary (strategy) layers

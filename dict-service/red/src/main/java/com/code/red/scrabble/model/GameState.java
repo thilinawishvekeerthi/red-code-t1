@@ -1,5 +1,6 @@
 package com.code.red.scrabble.model;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,7 @@ public class GameState {
     private final TileBag tileBag;
 
     private UUID currentTurn;
+    private Instant lastTurnTimestamp;
     private GameStatus status = GameStatus.ACTIVE;
     private int consecutivePasses;
 
@@ -93,4 +95,13 @@ public class GameState {
         }
         throw new IllegalArgumentException("Opponent not found");
     }
+
+    public Instant getLastTurnTimestamp() {
+        return lastTurnTimestamp;
+    }
+
+    public void markTurnStart(Instant now) {
+        this.lastTurnTimestamp = now;
+    }
 }
+
